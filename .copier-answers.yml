@@ -1,0 +1,11 @@
+# Do not edit - changes here will be overwritten by Copier
+_commit: v1
+_src_path: gh:pydev-guide/pyrepo-copier
+author_email: martenchaillet@gmail.com
+author_name: Marten Chaillet
+github_username: McHaillet
+mode: tooling
+module_name: tttsa
+project_name: tttsa
+project_short_description: Automated tilt-series alignment for cryo-ET.
+
