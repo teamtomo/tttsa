@@ -13,3 +13,4 @@ import logging
 import sys
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
+from .main import tilt_series_alignment

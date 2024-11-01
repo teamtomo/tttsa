@@ -40,7 +40,9 @@ dependencies = [
     "einops",
     "numpy",
     "torch-grid-utils",
-    "torch-cubic-spline-grids"
+    "torch-cubic-spline-grids",
+    "torch-fourier-shift",
+    "torch-fourier-rescale",
 ]
 
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
