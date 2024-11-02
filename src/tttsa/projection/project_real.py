@@ -17,6 +17,7 @@ def common_lines_projection(
     For now only assumes to project with a single matrix, but should also work for
     sets of matrices.
     """
+    # square image for possible fourier space extraction
     device = image.device
     image_dimensions = image.shape[-2:]
     image_center = dft_center(image_dimensions, rfft=False, fftshifted=True)
@@ -26,7 +27,8 @@ def common_lines_projection(
     r0 = R_2d(angles, yx=True)
     s1 = T_2d(image_center)
     M = einops.rearrange(
-        s1 @ r0 @ s0, "... i j -> ... 1 1 i j"
+        torch.linalg.inv(s1 @ r0 @ s0), 
+        "... i j -> ... 1 1 i j"
     ).to(device)
 
     grid = homogenise_coordinates(coordinate_grid(image_dimensions, device=device))
@@ -67,13 +69,14 @@ def tomogram_reprojection(
     transform_center = dft_center(transform_shape, rfft=False, fftshifted=True)
 
     # time for real space projection
-    s0 = T(-transform_center)
+    s0 = T(-tomogram_center)
     r0 = Ry(tilt_angles, zyx=True)
     r1 = Rz(tilt_axis_angles, zyx=True)
-    s1 = T(F.pad(-shifts, pad=(1, 0), value=0))
-    s2 = T(tomogram_center)
+    s1 = T(F.pad(shifts, pad=(1, 0), value=0))
+    s2 = (transform_center)
     M = einops.rearrange(
-        torch.linalg.inv(s2 @ s1 @ r1 @ r0 @ s0), "... i j -> ... 1 1 i j"
+        s2 @ s1 @ r1 @ r0 @ s0, 
+        "... i j -> ... 1 1 i j"
     ).to(device)
 
     grid = homogenise_coordinates(coordinate_grid(tomogram_dimensions, device=device))
