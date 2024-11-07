@@ -20,6 +20,7 @@ def tilt_series_alignment(
     tilt_angle_priors: torch.Tensor,
     tilt_axis_angle_prior: torch.Tensor,
     alignment_z_height: int,
+    find_tilt_angle_offset: bool = True,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Align a tilt-series using AreTomo-style projection matching.
 
@@ -74,21 +75,26 @@ def tilt_series_alignment(
 
         coarse_aligned = fourier_shift_image_2d(tilt_series, shifts=shifts)
 
-    for _ in range(3):
-        tilt_angle_offset = optimize_tilt_angle_offset(
-            tilt_series, coarse_alignment_mask, tilt_angles, tilt_axis_angles, shifts
-        )
-        print(f"detected tilt angle offset: {tilt_angle_offset}")
-        tilt_angles = tilt_angles + tilt_angle_offset.detach()
-        reference_tilt = int((tilt_angles).abs().argmin())
+    if find_tilt_angle_offset:
+        for _ in range(3):
+            tilt_angle_offset = optimize_tilt_angle_offset(
+                tilt_series,
+                coarse_alignment_mask,
+                tilt_angles,
+                tilt_axis_angles,
+                shifts,
+            )
+            print(f"detected tilt angle offset: {tilt_angle_offset}")
+            tilt_angles = tilt_angles + tilt_angle_offset.detach()
+            reference_tilt = int((tilt_angles).abs().argmin())
 
-        shifts = stretch_align(
-            tilt_series,
-            reference_tilt,
-            coarse_alignment_mask,
-            tilt_angles,
-            tilt_axis_angles,
-        )
+            shifts = stretch_align(
+                tilt_series,
+                reference_tilt,
+                coarse_alignment_mask,
+                tilt_angles,
+                tilt_axis_angles,
+            )
 
     # some optimizations parameters
     max_iter = 10  # this seems solid

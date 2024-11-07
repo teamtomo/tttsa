@@ -60,6 +60,7 @@ dev = [
     "mrcfile",
     "torch-fourier-rescale",
     "torch-subpixel-crop",
+    "pooch",
 ]
 
 [project.urls]

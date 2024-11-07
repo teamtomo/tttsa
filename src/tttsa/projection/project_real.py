@@ -71,7 +71,7 @@ def tomogram_reprojection(
     s2 = T(tomogram_center)
     M = s2 @ s1 @ r1 @ r0 @ s0
     Mproj = M[:, 1:3, :]
-    Mproj = einops.rearrange(Mproj, "tttsa.. i j -> ... 1 1 i j").to(device)
+    Mproj = einops.rearrange(Mproj, "... i j -> ... 1 1 i j").to(device)
 
     grid = homogenise_coordinates(coordinate_grid(tomogram_dimensions, device=device))
     grid = einops.rearrange(grid, "d h w coords -> d h w coords 1")
