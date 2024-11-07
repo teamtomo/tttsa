@@ -1,21 +1,26 @@
-import torch
+"""Filtered-back projection in real space."""
+
+from typing import Tuple
+
 import einops
+import torch
 import torch.nn.functional as F
 from torch_grid_utils import coordinate_grid
 
-from tttsa.transformations import R_2d, T_2d, T, Ry
-from tttsa.utils import dft_center, homogenise_coordinates, array_to_grid_sample
+from tttsa.affine import affine_transform_2d
+from tttsa.transformations import R_2d, Ry, T, T_2d
+from tttsa.utils import array_to_grid_sample, dft_center, homogenise_coordinates
 
 
 def filtered_back_projection_3d(
-    tilt_series,
-    tomogram_dimensions,
-    tilt_angles,
-    tilt_axis_angles,
-    shifts,
+    tilt_series: torch.Tensor,
+    tomogram_dimensions: Tuple[int, int, int],
+    tilt_angles: torch.Tensor,
+    tilt_axis_angles: torch.Tensor,
+    shifts: torch.Tensor,
     weighting: str = "exact",
     object_diameter: float | None = None,
-):
+) -> torch.Tensor:
     """Run weighted back projection incorporating some alignment parameters.
 
     weighting: str, default "hamming"
@@ -40,31 +45,22 @@ def filtered_back_projection_3d(
     transformed_image_dimensions = tomogram_dimensions[-2:]
     tomogram_center = dft_center(tomogram_dimensions, rfft=False, fftshifted=True)
     tilt_image_center = dft_center(tilt_image_dimensions, rfft=False, fftshifted=True)
-    transformed_image_center = dft_center(transformed_image_dimensions, rfft=False,
-                                          fftshifted=True)
+    transformed_image_center = dft_center(
+        transformed_image_dimensions, rfft=False, fftshifted=True
+    )
     _, filter_size = transformed_image_dimensions
 
     # generate the 2d alignment affine matrix
-    s0 = T_2d(-transformed_image_center)
+    s0 = T_2d(-tilt_image_center)
     r0 = R_2d(tilt_axis_angles, yx=True)
     s1 = T_2d(-shifts)
-    s2 = T_2d(tilt_image_center)
-    M = einops.rearrange((s2 @ s1 @ r0 @ s0), "... i j -> ... 1 1 i j").to(device)
+    s2 = T_2d(transformed_image_center)
+    M = torch.linalg.inv(s2 @ s1 @ r0 @ s0).to(device)
 
-    grid = homogenise_coordinates(coordinate_grid(transformed_image_dimensions, device=device))
-    grid = einops.rearrange(grid, "h w coords -> h w coords 1")
-    grid = M @ grid
-    grid = einops.rearrange(grid, "... d h w coords 1 -> ... d h w coords")[
-        ..., :2
-    ].contiguous()
-    grid_sample_coordinates = array_to_grid_sample(grid, tilt_image_dimensions)
-    aligned_ts = torch.squeeze(
-        F.grid_sample(
-            einops.rearrange(tilt_series, "n h w -> n 1 h w"),
-            grid_sample_coordinates,
-            align_corners=True,
-            mode="bicubic",
-        )
+    aligned_ts = affine_transform_2d(
+        tilt_series,
+        M,
+        out_shape=transformed_image_dimensions,
     )
 
     # generate weighting function and apply to aligned tilt series
@@ -74,13 +70,15 @@ def filtered_back_projection_3d(
                 "Calculation of exact weighting requires an object " "diameter."
             )
         if len(tilt_angles) == 1:
-            filters = 1
+            # set explicitly as tensor to ensure correct typing
+            filters = torch.tensor(1.0, device=device)
         else:  # slice_width could be provided as a function argument it can be
             # calculated as: (pixel_size * 2 * imdim) / object_diameter
             q = einops.rearrange(
                 torch.arange(
-                    filter_size // 2 + filter_size % 2 + 1, dtype=torch.float32,
-                    device=device
+                    filter_size // 2 + filter_size % 2 + 1,
+                    dtype=torch.float32,
+                    device=device,
                 )
                 / filter_size,
                 "q -> 1 1 q",
@@ -106,8 +104,11 @@ def filtered_back_projection_3d(
         # https://github.com/czimaginginstitute/AreTomo3/blob/
         #   c39dcdad9525ee21d7308a95622f3d47fe7ab4b9/AreTomo/Recon/GRWeight.cu#L20
         q = (
-            torch.arange(filter_size // 2 + filter_size % 2 + 1, dtype=torch.float32,
-                         device=device)
+            torch.arange(
+                filter_size // 2 + filter_size % 2 + 1,
+                dtype=torch.float32,
+                device=device,
+            )
             / filter_size
         )
         # regular hamming: q * (.54 + .46 * torch.cos(torch.pi * q))
@@ -123,10 +124,14 @@ def filtered_back_projection_3d(
     if len(weighted.shape) == 2:  # rfftn gets rid of batch dimension: add it back
         weighted = einops.rearrange(weighted, "h w -> 1 h w")
 
-    # time for real space back projection
+    # create recon from weighted-aligned ts
     s0 = T(-tomogram_center)
     r0 = Ry(tilt_angles, zyx=True)
-    s1 = T(F.pad(transformed_image_center, pad=(1, 0), value=0))
+    s1 = T(tomogram_center)
+    # This would actually be a double linalg.inv. First for the inverse of the
+    # forward projection alignment model. The second for the affine transform.
+    # It could be more logical to use affine_transform_3d, but it requires
+    # recalculation of the grid for every iteration.
     M = einops.rearrange(s1 @ r0 @ s0, "... i j -> ... 1 1 i j").to(device)
 
     reconstruction = torch.zeros(

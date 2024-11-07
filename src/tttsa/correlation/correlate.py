@@ -1,7 +1,7 @@
+"""DFT based cross-correlation between images."""
+
 import einops
 import torch
-
-from tttsa.correlation.correlate_dft import correlate_dft_2d
 
 
 def correlate_2d(
@@ -14,13 +14,18 @@ def correlate_2d(
     """
     if normalize is True:
         h, w = a.shape[-2:]
-        a_norm = einops.reduce(a ** 2, '... h w -> ... 1 1', reduction='mean') ** 0.5
-        b_norm = einops.reduce(b ** 2, '... h w -> ... 1 1', reduction='mean') ** 0.5
+        a_norm = einops.reduce(a**2, "... h w -> ... 1 1", reduction="mean") ** 0.5
+        b_norm = einops.reduce(b**2, "... h w -> ... 1 1", reduction="mean") ** 0.5
         a = a / a_norm
         b = b / b_norm
-    a = torch.fft.rfftn(a, dim=(-2, -1))
-    b = torch.fft.rfftn(b, dim=(-2, -1))
-    result = correlate_dft_2d(a, b, rfft=True, fftshifted=False)
+    fta = torch.fft.rfftn(a, dim=(-2, -1))
+    ftb = torch.fft.rfftn(b, dim=(-2, -1))
+    result = fta * torch.conj(ftb)
+    # AreTomo using some like this (filtered FFT-based approach):
+    # result = result / torch.sqrt(result.abs() + .0001)
+    # result = bfactor_dft(result, 300, (result.shape[-2], ) * 2, 1, True)
+    result = torch.fft.irfftn(result, dim=(-2, -1), s=a.shape)
+    result = torch.real(torch.fft.ifftshift(result, dim=(-2, -1)))
     if normalize is True:
         result = result / (h * w)
     return result

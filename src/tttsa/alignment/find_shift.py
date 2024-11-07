@@ -1,3 +1,5 @@
+"""Module for finding shifts between images."""
+
 import numpy as np
 import torch
 
@@ -8,7 +10,7 @@ from tttsa.utils import dft_center
 def find_image_shift(
     image_a: torch.Tensor,
     image_b: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> torch.Tensor:
     """Find the shift between image a and b.
 
     Applying the shift to b aligns it with

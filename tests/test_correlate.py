@@ -1,6 +1,5 @@
-import torch
 import numpy as np
-
+import torch
 from libtilt.correlation import correlate_2d, correlate_dft_2d
 from libtilt.fft_utils import fftshift_2d
 
@@ -17,7 +16,7 @@ def test_correlate_2d():
     shift = torch.as_tensor(peak_position) - torch.tensor([5, 5])
     assert peak_position == (4, 4)
     assert torch.allclose(shift, torch.tensor([-1, -1]))
-    assert torch.allclose(cross_correlation[peak_position], torch.tensor([1.]))
+    assert torch.allclose(cross_correlation[peak_position], torch.tensor([1.0]))
 
 
 def test_correlate_dft_2d():
@@ -34,7 +33,7 @@ def test_correlate_dft_2d():
     assert torch.allclose(
         correlate_dft_2d(a_fft2, b_fft2, rfft=False, fftshifted=False),
         expected,
-        atol=1e-6
+        atol=1e-6,
     )
 
     a_rfft2 = torch.fft.rfft2(a)
@@ -60,6 +59,3 @@ def test_correlate_dft_2d():
         expected,
         atol=1e-6,
     )
-
-
-
