@@ -20,7 +20,7 @@ Developer install after cloning into a conda environment (`conda create -n tttsa
 python -m pip install .[dev]
 ```
 
-This will run the example. It will take some time to initially download the example from Zenodo.
+This will run the example. It will take some time to initially download the data from Zenodo.
 
 ```
 cd examples
