@@ -34,7 +34,7 @@ classifiers = [
 ]
 # add your package dependencies here
 dependencies = [
-    "torch",
+    "torch >= 2.2",  # at least 2.2 for torch.unravel_index
     "torch-grid-utils",
     "torch-cubic-spline-grids",
     "torch-fourier-shift",
