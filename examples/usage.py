@@ -24,7 +24,7 @@ GOODBOY = pooch.create(
     },
 )
 
-IMAGE_FILE = Path(GOODBOY.fetch("tomo200528_107.st"))
+IMAGE_FILE = Path(GOODBOY.fetch("tomo200528_107.st", progressbar=True))
 with open(Path(GOODBOY.fetch("tomo200528_107.rawtlt"))) as f:
     STAGE_TILT_ANGLE_PRIORS = torch.tensor([float(x) for x in f.readlines()])
 IMAGE_PIXEL_SIZE = 1.724
