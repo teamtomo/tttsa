@@ -14,7 +14,8 @@ Not yet stable and the API might change.
 
 ## Give it a whirl?
 
-Developer install after cloning into a conda environment (`conda create -n tttsa python=3.12`):
+Developer install into a conda environment (`conda create -n tttsa python=3.12`) 
+after locally cloning the repository:
 
 ```
 python -m pip install .[dev]
