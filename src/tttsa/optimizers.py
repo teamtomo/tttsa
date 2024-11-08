@@ -18,7 +18,8 @@ def stretch_loss(
     shifts: torch.Tensor,
 ) -> torch.Tensor:
     """Find coarse shifts of images while stretching each pair along the tilt axis."""
-    sq_diff = torch.tensor(0.0)
+    device = tilt_series.device
+    sq_diff = torch.tensor(0.0, device=device)
     for i in range(reference_tilt_id, 0, -1):
         scale_factor = torch.cos(torch.deg2rad(tilt_angles[i : i + 1])) / torch.cos(
             torch.deg2rad(tilt_angles[i - 1 : i])
@@ -61,7 +62,7 @@ def stretch_loss(
         ref = tilt_series[i] * correlation_mask
         ref = (ref - ref.mean()) / ref.std()
         sq_diff = sq_diff + ((ref - stretched) ** 2).sum() / stretched.numel()
-    return sq_diff
+    return sq_diff.cpu()
 
 
 def optimize_tilt_axis_angle(
@@ -114,7 +115,7 @@ def optimize_tilt_axis_angle(
         ) ** 2
         loss = einops.reduce(squared_differences, "b1 b2 d -> 1", reduction="sum")
         loss.backward()
-        return loss
+        return loss.cpu()
 
     for _ in range(3):
         lbfgs.step(closure)
@@ -132,7 +133,7 @@ def optimize_tilt_angle_offset(
     shifts: torch.Tensor,
 ) -> torch.Tensor:
     """Optimize a tilt-angle offset for the lowest stretch correlation loss."""
-    tilt_angle_offset = torch.tensor([0.0], requires_grad=True)
+    tilt_angle_offset = torch.tensor(0.0, requires_grad=True)
     lbfgs = torch.optim.LBFGS(
         [tilt_angle_offset],
         history_size=10,

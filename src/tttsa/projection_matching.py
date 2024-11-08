@@ -23,6 +23,7 @@ def projection_matching(
     exact_weighting_object_diameter: float | None = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Run projection matching."""
+    device = tilt_series.device
     n_tilts, size, _ = tilt_series.shape
     aligned_set = [reference_tilt_id]
     shifts = current_shifts.detach().clone()
@@ -47,7 +48,7 @@ def projection_matching(
             "n -> n 1 1",
         )
         intermediate_recon, _ = filtered_back_projection_3d(
-            (tilt_series[aligned_set,] * weights[aligned_set,]).to("cuda"),
+            tilt_series[aligned_set,] * weights[aligned_set,].to(device),
             tomogram_dimensions,
             tilt_angles[aligned_set,],
             tilt_axis_angles[aligned_set,],
@@ -65,19 +66,19 @@ def projection_matching(
 
         # ensure correlation in relevant area
         projection_weights = projection_weights / projection_weights.max()
-        projection_weights *= alignment_mask.to("cuda")
+        projection_weights *= alignment_mask
         projection *= projection_weights
         projection = (projection - projection.mean()) / projection.std()
-        raw = tilt_series[i].to("cuda") * projection_weights
+        raw = tilt_series[i] * projection_weights
         raw = (raw - raw.mean()) / raw.std()
         shift = find_image_shift(
             raw,
             projection,
         )
-        shifts[i] -= shift.to("cpu")
+        shifts[i] -= shift
         aligned_set.append(i)
 
         # for debugging:
-        projections[i] = projection.detach().to("cpu")
+        projections[i] = projection.detach().cpu()
 
     return shifts, projections

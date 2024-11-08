@@ -27,3 +27,5 @@ This will run the example. It will take some time to initially download the data
 cd examples
 python usage.py
 ```
+
+In `usage.py` you can also adjust the DEVICE to run on cpu (default is cuda:0).

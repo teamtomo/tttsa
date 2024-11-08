@@ -28,9 +28,8 @@ IMAGE_FILE = Path(GOODBOY.fetch("tomo200528_107.st", progressbar=True))
 with open(Path(GOODBOY.fetch("tomo200528_107.rawtlt"))) as f:
     STAGE_TILT_ANGLE_PRIORS = torch.tensor([float(x) for x in f.readlines()])
 IMAGE_PIXEL_SIZE = 1.724
-# STAGE_TILT_ANGLE_PRIORS = torch.arange(-51, 54, 3)  # 107: 54, 100: 51
-TILT_AXIS_ANGLE_PRIOR = -88.7  # -88.7 according to mdoc, but faulty to test
 # this angle is assumed to be a clockwise forward rotation after projecting the sample
+TILT_AXIS_ANGLE_PRIOR = torch.tensor(-88.7)
 ALIGNMENT_PIXEL_SIZE = IMAGE_PIXEL_SIZE * 8
 ALIGN_Z = int(1600 / ALIGNMENT_PIXEL_SIZE)  # number is in A
 RECON_Z = int(2400 / ALIGNMENT_PIXEL_SIZE)
@@ -38,6 +37,9 @@ WEIGHTING = "hamming"  # weighting scheme for filtered back projection
 # the object diameter in number of pixels
 OBJECT_DIAMETER = 300 / ALIGNMENT_PIXEL_SIZE
 OUTPUT_DIR = Path(__file__).parent.resolve().joinpath("data")
+
+# Set the device for running
+DEVICE = "cuda:0"
 
 
 tilt_series = torch.as_tensor(mrcfile.read(IMAGE_FILE))
@@ -66,8 +68,9 @@ tilt_series = subpixel_crop_2d(  # torch-subpixel-crop
 _, h, w = tilt_series.shape
 size = min(h, w)
 
+# Move all the input to the device
 tilt_angles, tilt_axis_angles, shifts = tilt_series_alignment(
-    tilt_series,
+    tilt_series.to(DEVICE),
     STAGE_TILT_ANGLE_PRIORS,
     TILT_AXIS_ANGLE_PRIOR,
     ALIGN_Z,
@@ -83,11 +86,19 @@ final, aligned_ts = filtered_back_projection_3d(
     weighting=WEIGHTING,
     object_diameter=OBJECT_DIAMETER,
 )
+final = final.to("cpu")
+aligned_ts = aligned_ts.to("cpu")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 mrcfile.write(
     OUTPUT_DIR.joinpath(IMAGE_FILE.with_suffix(".mrc").name),
     final.detach().numpy().astype(np.float32),
+    voxel_size=ALIGNMENT_PIXEL_SIZE,
+    overwrite=True,
+)
+mrcfile.write(
+    OUTPUT_DIR.joinpath(IMAGE_FILE.with_suffix(".ali").name),
+    aligned_ts.detach().numpy().astype(np.float32),
     voxel_size=ALIGNMENT_PIXEL_SIZE,
     overwrite=True,
 )

@@ -1,6 +1,5 @@
 """Module for finding shifts between images."""
 
-import numpy as np
 import torch
 
 from tttsa.correlation import correlate_2d
@@ -28,19 +27,14 @@ def find_image_shift(
 
     Returns
     -------
-    shift, correlation: torch.Tensor, torch.Tensor
-        `(2, )` shift in y and x; and maximal correlation
+    shift: torch.Tensor
+        `(2, )` shift in y and x, always on CPU
     """
-    center = dft_center(
-        image_a.shape, rfft=False, fftshifted=True, device=image_a.device
-    )
+    center = dft_center(image_a.shape, rfft=False, fftshifted=True)
 
     # calculate initial shift with integer precision
     correlation = correlate_2d(image_a, image_b, normalize=True)
-    maximum_idx = torch.tensor(  # explicitly put tensor on CPU in case input is on GPU
-        np.unravel_index(correlation.argmax().cpu(), shape=image_a.shape),
-        device=image_a.device,
-    )
+    maximum_idx = torch.unravel_index(correlation.argmax().cpu(), shape=image_a.shape)
     y, x = maximum_idx
     # Parabolic interpolation in the y direction
     f_y0 = correlation[y - 1, x]

@@ -36,6 +36,7 @@ def tilt_series_alignment(
         https://github.com/czimaginginstitute/AreTomo3
     """
     # set tomogram and tilt-series shape
+    device = tilt_series.device
     n_tilts, h, w = tilt_series.shape
     size = min(h, w)
     tomogram_dimensions = (alignment_z_height, size, size)
@@ -47,23 +48,26 @@ def tilt_series_alignment(
         radius=size // 3,
         smoothing_radius=size // 6,
         image_shape=tilt_dimensions,
+        device=device,
     )
+
+    console.print("=== Starting teamtomo tilt-series alignment!", style="bold blue")
 
     # do an IMOD style coarse tilt-series alignment
     coarse_shifts = coarse_align(tilt_series, reference_tilt, coarse_alignment_mask)
 
-    tilt_axis_angles = torch.tensor(tilt_axis_angle_prior)
+    tilt_axis_angles = tilt_axis_angle_prior.clone()
     shifts = coarse_shifts.clone()
     tilt_angles = tilt_angle_priors.clone()
     start_taa_grid_points = 1  # taa = tilt-axis angle
     pm_taa_grid_points = 3  # pm = projection matching
-    console.print("=== Starting teamtomo tilt-series alignment!", style="bold blue")
+
     console.print(
         f"=== Optimizing tilt-axis angle with {start_taa_grid_points} grid point."
     )
     for _ in track(range(3)):  # optimize tilt axis angle
         tilt_axis_angles = optimize_tilt_axis_angle(
-            fourier_shift_image_2d(tilt_series, shifts=shifts),
+            fourier_shift_image_2d(tilt_series, shifts=shifts.to(device)),
             coarse_alignment_mask,
             tilt_axis_angles,
             grid_points=start_taa_grid_points,
@@ -109,40 +113,39 @@ def tilt_series_alignment(
     # some optimizations parameters
     max_iter = 10  # this seems solid
     tolerance = 0.1  # should probably be related to pixel size
-    predicted_tilts = []
+    prev_shifts = shifts.clone()
     console.print(
         f"=== Starting projection matching with"
         f" {pm_taa_grid_points} grid points for the tilt-axis angle."
     )
     for i in range(max_iter):
         tilt_axis_angles = optimize_tilt_axis_angle(
-            fourier_shift_image_2d(tilt_series, shifts=shifts),
+            fourier_shift_image_2d(tilt_series, shifts=prev_shifts.to(device)),
             coarse_alignment_mask,
             tilt_axis_angles,
             grid_points=pm_taa_grid_points,
         )
 
-        new_shifts, pred = projection_matching(
+        shifts, _ = projection_matching(
             tilt_series,
             tomogram_dimensions,
             reference_tilt,  # REFERENCE_TILT,
             tilt_angles,
             tilt_axis_angles,
-            shifts,
+            prev_shifts,
             coarse_alignment_mask,
         )
-        predicted_tilts.append(pred)
 
         console.print(
             f"--> Iteration {i + 1}, "
             f"sum of translation differences ="
-            f" {torch.abs(shifts - new_shifts).sum():.2f}"
+            f" {torch.abs(prev_shifts - shifts).sum():.2f}"
         )
 
-        if torch.all(torch.abs(shifts - new_shifts) < tolerance):
+        if torch.all(torch.abs(prev_shifts - shifts) < tolerance):
             break
 
-        shifts = new_shifts
+        prev_shifts = shifts
 
     console.print(
         f"=== Final tilt-axis angle: {tilt_axis_angles.mean():.2f}° +-"

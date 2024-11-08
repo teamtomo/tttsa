@@ -24,9 +24,9 @@ def dft_center(
 ) -> torch.LongTensor:
     """Return the position of the DFT center for a given input shape."""
     fft_center = torch.zeros(size=(len(image_shape),), device=device)
-    image_shape = torch.as_tensor(image_shape).float()
+    image_shape = torch.as_tensor(image_shape, device=device).float()
     if rfft is True:
-        image_shape = torch.tensor(rfft_shape(image_shape))
+        image_shape = torch.tensor(rfft_shape(image_shape), device=device)
     if fftshifted is True:
         fft_center = torch.divide(image_shape, 2, rounding_mode="floor")
     if rfft is True:
@@ -47,7 +47,12 @@ def homogenise_coordinates(coords: torch.Tensor) -> torch.Tensor:
     output: torch.Tensor
         `(..., 4)` array of homogeneous coordinates
     """
-    return F.pad(torch.as_tensor(coords), pad=(0, 1), mode="constant", value=1)
+    return F.pad(
+        torch.as_tensor(coords, device=coords.device),
+        pad=(0, 1),
+        mode="constant",
+        value=1,
+    )
 
 
 def array_to_grid_sample(
