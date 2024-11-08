@@ -4,6 +4,7 @@ from typing import Tuple
 
 import einops
 import torch
+from rich.progress import track
 
 from .alignment import find_image_shift
 from .back_projection import filtered_back_projection_3d
@@ -39,7 +40,7 @@ def projection_matching(
     projections = torch.zeros((n_tilts, size, size))
     projections[reference_tilt_id] = tilt_series[reference_tilt_id]
 
-    for i in index_sequence:
+    for i in track(index_sequence):
         tilt_angle = tilt_angles[i]
         weights = einops.rearrange(
             torch.cos(torch.deg2rad(torch.abs(tilt_angles - tilt_angle))),
@@ -78,9 +79,5 @@ def projection_matching(
 
         # for debugging:
         projections[i] = projection.detach().to("cpu")
-
-        print(  # TODO should be some sort of logging?
-            f"aligned index {i} at angle {tilt_angle:.2f}: {shift}"
-        )
 
     return shifts, projections

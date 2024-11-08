@@ -12,7 +12,6 @@ def coarse_align(
     mask: torch.Tensor,
 ) -> torch.Tensor:
     """Find coarse shifts of images without stretching along tilt axis."""
-    print("finding translational alignment using pure cross-correlation")
     shifts = torch.zeros((len(tilt_series), 2), dtype=torch.float32)
     # find coarse alignment for negative tilts
     current_shift = torch.zeros(2)
@@ -41,7 +40,6 @@ def stretch_align(
     tilt_axis_angles: torch.Tensor,
 ) -> torch.Tensor:
     """Find coarse shifts of images while stretching each pair along the tilt axis."""
-    print("finding translational alignment using pairwise stretching")
     shifts = torch.zeros((len(tilt_series), 2), dtype=torch.float32)
     # find coarse alignment for negative tilts
     current_shift = torch.zeros(2)

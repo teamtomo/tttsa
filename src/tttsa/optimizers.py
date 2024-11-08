@@ -71,11 +71,6 @@ def optimize_tilt_axis_angle(
     grid_points: int = 1,
 ) -> torch.Tensor:
     """Optimize tilt axis angles on a spline grid using the LBFGS optimizer."""
-    print(
-        f"optimizing the tilt-axis angle (in-plane rotations) with {grid_points} "
-        f"grid point(s)"
-    )
-
     coarse_aligned_masked = aligned_ts * coarse_alignment_mask
 
     # generate a weighting for the common line ROI by projecting the mask

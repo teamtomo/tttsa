@@ -15,7 +15,7 @@ except PackageNotFoundError:
 __author__ = "Marten Chaillet"
 __email__ = "martenchaillet@gmail.com"
 
-import logging
-import sys
-
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+# import logging
+# import sys
+#
+# logging.basicConfig(stream=sys.stdout, level=logging.INFO)
