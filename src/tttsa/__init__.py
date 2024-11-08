@@ -2,6 +2,12 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
+from .tttsa import tilt_series_alignment
+
+__all__ = [
+    "tilt_series_alignment",
+]
+
 try:
     __version__ = version("tttsa")
 except PackageNotFoundError:
@@ -11,6 +17,5 @@ __email__ = "martenchaillet@gmail.com"
 
 import logging
 import sys
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-from .main import tilt_series_alignment
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
