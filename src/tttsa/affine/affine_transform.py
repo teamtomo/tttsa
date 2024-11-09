@@ -97,11 +97,16 @@ def affine_transform_3d(
         ..., :3
     ].contiguous()
     grid_sample_coordinates = array_to_grid_sample(grid, images.shape[-3:])
-    if images.dim() == 3:  # needed for grid sample
-        images = einops.repeat(images, "d h w -> n d h w", n=M.shape[0])
+    samples = (
+        einops.repeat(  # needed for grid sample
+            images, "d h w -> n d h w", n=M.shape[0]
+        )
+        if images.dim() == 3
+        else images
+    )
     transformed = einops.rearrange(
         F.grid_sample(
-            einops.rearrange(images, "... d h w -> ... 1 d h w"),
+            einops.rearrange(samples, "... d h w -> ... 1 d h w"),
             grid_sample_coordinates,
             align_corners=True,
             mode=interpolation,
