@@ -36,6 +36,14 @@ def find_image_shift(
     correlation = correlate_2d(image_a, image_b, normalize=True)
     maximum_idx = torch.unravel_index(correlation.argmax().cpu(), shape=image_a.shape)
     y, x = maximum_idx
+    # Ensure that the max index is not on the border
+    if (
+        y == 0
+        or y == correlation.shape[0] - 1
+        or x == 0
+        or x == correlation.shape[1] - 1
+    ):
+        return torch.tensor([float(y), float(x)]) - center
     # Parabolic interpolation in the y direction
     f_y0 = correlation[y - 1, x]
     f_y1 = correlation[y, x]
