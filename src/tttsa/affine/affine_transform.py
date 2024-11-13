@@ -62,6 +62,11 @@ def affine_transform_2d(
         if images.dim() == 2
         else images
     )
+    if samples.shape[0] != grid_sample_coordinates.shape[0]:
+        raise ValueError(
+            "Provide either an equal batch of images and matrices or "
+            "multiple matrices for a single image."
+        )
     transformed = einops.rearrange(
         F.grid_sample(
             einops.rearrange(samples, "... h w -> ... 1 h w"),
@@ -90,7 +95,7 @@ def affine_transform_3d(
     grid = einops.rearrange(grid, "d h w coords -> 1 d h w coords 1")
     M = einops.rearrange(
         torch.linalg.inv(affine_matrices),  # invert so that each grid cell points
-        "... i j -> ... 1 1 i j",  # to where it needs to get data from
+        "... i j -> ... 1 1 1 i j",  # to where it needs to get data from
     ).to(device)
     grid = M @ grid
     grid = einops.rearrange(grid, "... d h w coords 1 -> ... d h w coords")[
@@ -104,6 +109,11 @@ def affine_transform_3d(
         if images.dim() == 3
         else images
     )
+    if samples.shape[0] != grid_sample_coordinates.shape[0]:
+        raise ValueError(
+            "Provide either an equal batch of images and matrices or "
+            "multiple matrices for a single image."
+        )
     transformed = einops.rearrange(
         F.grid_sample(
             einops.rearrange(samples, "... d h w -> ... 1 d h w"),
