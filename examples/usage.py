@@ -7,6 +7,8 @@ import mrcfile
 import numpy as np
 import pooch
 import torch
+from cryotypes.projectionmodel import ProjectionModel
+from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_fourier_rescale import fourier_rescale_2d
 from torch_subpixel_crop import subpixel_crop_2d
 
@@ -26,7 +28,7 @@ GOODBOY = pooch.create(
 
 IMAGE_FILE = Path(GOODBOY.fetch("tomo200528_107.st", progressbar=True))
 with open(Path(GOODBOY.fetch("tomo200528_107.rawtlt"))) as f:
-    STAGE_TILT_ANGLE_PRIORS = torch.tensor([float(x) for x in f.readlines()])
+    STAGE_TILT_ANGLE_PRIORS = [float(x) for x in f.readlines()]
 IMAGE_PIXEL_SIZE = 1.724
 # this angle is assumed to be a clockwise forward rotation after projecting the sample
 TILT_AXIS_ANGLE_PRIOR = torch.tensor(-88.7)
@@ -41,6 +43,19 @@ OUTPUT_DIR = Path(__file__).parent.resolve().joinpath("data")
 # Set the device for running
 DEVICE = "cuda:0"
 
+# Initialize the projection-model prior
+projection_model_prior = ProjectionModel(
+    {
+        PMDL.ROTATION_Z: 0.0,
+        PMDL.ROTATION_Y: STAGE_TILT_ANGLE_PRIORS,
+        PMDL.ROTATION_X: 0.0,
+        PMDL.SHIFT_X: 0.0,
+        PMDL.SHIFT_Y: 0.0,
+        PMDL.EXPERIMENT_ID: IMAGE_FILE.stem,
+        PMDL.PIXEL_SPACING: ALIGNMENT_PIXEL_SIZE,
+        PMDL.SOURCE: IMAGE_FILE.name,
+    }
+)
 
 tilt_series = torch.as_tensor(mrcfile.read(IMAGE_FILE))
 
