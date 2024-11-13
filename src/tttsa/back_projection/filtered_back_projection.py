@@ -5,19 +5,22 @@ from typing import Tuple
 import einops
 import torch
 import torch.nn.functional as F
+from cryotypes.projectionmodel import ProjectionModel
+from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_grid_utils import coordinate_grid
 
 from tttsa.affine import affine_transform_2d
 from tttsa.transformations import R_2d, Ry, T, T_2d
 from tttsa.utils import array_to_grid_sample, dft_center, homogenise_coordinates
 
+# update shift
+PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
+
 
 def filtered_back_projection_3d(
     tilt_series: torch.Tensor,
     tomogram_dimensions: Tuple[int, int, int],
-    tilt_angles: torch.Tensor,
-    tilt_axis_angles: torch.Tensor,
-    shifts: torch.Tensor,
+    projection_model: ProjectionModel,
     weighting: str = "exact",
     object_diameter: float | None = None,
 ) -> torch.Tensor:
@@ -52,8 +55,8 @@ def filtered_back_projection_3d(
 
     # generate the 2d alignment affine matrix
     s0 = T_2d(-tilt_image_center)
-    r0 = R_2d(tilt_axis_angles, yx=True)
-    s1 = T_2d(-shifts)
+    r0 = R_2d(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), yx=True)
+    s1 = T_2d(torch.tensor(projection_model[PMDL.SHIFT].to_numpy()))
     s2 = T_2d(transformed_image_center)
     M = torch.linalg.inv(s2 @ s1 @ r0 @ s0).to(device)
 
@@ -69,7 +72,7 @@ def filtered_back_projection_3d(
             raise ValueError(
                 "Calculation of exact weighting requires an object " "diameter."
             )
-        if len(tilt_angles) == 1:
+        if n_tilts == 1:
             # set explicitly as tensor to ensure correct typing
             filters = torch.tensor(1.0, device=device)
         else:  # slice_width could be provided as a function argument it can be
@@ -83,6 +86,7 @@ def filtered_back_projection_3d(
                 / filter_size,
                 "q -> 1 1 q",
             )
+            tilt_angles = torch.as_tensor(projection_model[PMDL.ROTATION_Y])
             sampling = torch.sin(
                 torch.deg2rad(
                     torch.abs(einops.rearrange(tilt_angles, "n -> n 1") - tilt_angles)
@@ -126,7 +130,7 @@ def filtered_back_projection_3d(
 
     # create recon from weighted-aligned ts
     s0 = T(-tomogram_center)
-    r0 = Ry(tilt_angles, zyx=True)
+    r0 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
     s1 = T(tomogram_center)
     # This would actually be a double linalg.inv. First for the inverse of the
     # forward projection alignment model. The second for the affine transform.
@@ -156,4 +160,4 @@ def filtered_back_projection_3d(
                 mode="bilinear",
             )
         )
-    return reconstruction, aligned_ts
+    return reconstruction

@@ -5,12 +5,17 @@ from typing import Tuple
 import einops
 import torch
 import torch.nn.functional as F
+from cryotypes.projectionmodel import ProjectionModel
+from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_grid_utils import coordinate_grid
 from torch_image_lerp import insert_into_image_2d
 
 from tttsa.affine import affine_transform_2d
 from tttsa.transformations import R_2d, Ry, Rz, T, T_2d
 from tttsa.utils import dft_center, homogenise_coordinates
+
+# update shift
+PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
 
 
 def common_lines_projection(
@@ -48,9 +53,7 @@ def common_lines_projection(
 def tomogram_reprojection(
     tomogram: torch.Tensor,
     tilt_image_dimensions: Tuple[int, int],
-    tilt_angles: torch.Tensor,
-    tilt_axis_angles: torch.Tensor,
-    shifts: torch.Tensor,
+    projection_model: ProjectionModel,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Predict a projection from an intermediate reconstruction.
 
@@ -65,9 +68,13 @@ def tomogram_reprojection(
 
     # time for real space projection
     s0 = T(-transform_center)
-    r0 = Ry(tilt_angles, zyx=True)
-    r1 = Rz(tilt_axis_angles, zyx=True)
-    s1 = T(F.pad(-shifts, pad=(1, 0), value=0))
+    r0 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
+    r1 = Rz(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), zyx=True)
+    s1 = T(
+        F.pad(
+            torch.tensor(projection_model[PMDL.SHIFT].to_numpy()), pad=(1, 0), value=0
+        )
+    )
     s2 = T(tomogram_center)
     M = s2 @ s1 @ r1 @ r0 @ s0
     Mproj = M[:, 1:3, :]

@@ -31,7 +31,7 @@ with open(Path(GOODBOY.fetch("tomo200528_107.rawtlt"))) as f:
     STAGE_TILT_ANGLE_PRIORS = [float(x) for x in f.readlines()]
 IMAGE_PIXEL_SIZE = 1.724
 # this angle is assumed to be a clockwise forward rotation after projecting the sample
-TILT_AXIS_ANGLE_PRIOR = torch.tensor(-88.7)
+TILT_AXIS_ANGLE_PRIOR = -88.7
 ALIGNMENT_PIXEL_SIZE = IMAGE_PIXEL_SIZE * 8
 ALIGN_Z = int(1600 / ALIGNMENT_PIXEL_SIZE)  # number is in A
 RECON_Z = int(2400 / ALIGNMENT_PIXEL_SIZE)
@@ -46,7 +46,7 @@ DEVICE = "cuda:0"
 # Initialize the projection-model prior
 projection_model_prior = ProjectionModel(
     {
-        PMDL.ROTATION_Z: 0.0,
+        PMDL.ROTATION_Z: TILT_AXIS_ANGLE_PRIOR,
         PMDL.ROTATION_Y: STAGE_TILT_ANGLE_PRIORS,
         PMDL.ROTATION_X: 0.0,
         PMDL.SHIFT_X: 0.0,
@@ -84,36 +84,26 @@ _, h, w = tilt_series.shape
 size = min(h, w)
 
 # Move all the input to the device
-tilt_angles, tilt_axis_angles, shifts = tilt_series_alignment(
+projection_model_optimized = tilt_series_alignment(
     tilt_series.to(DEVICE),
-    STAGE_TILT_ANGLE_PRIORS,
-    TILT_AXIS_ANGLE_PRIOR,
+    projection_model_prior,
     ALIGN_Z,
     find_tilt_angle_offset=False,
 )
 
-final, aligned_ts = filtered_back_projection_3d(
+final = filtered_back_projection_3d(
     tilt_series,
     (RECON_Z, size, size),
-    tilt_angles,
-    tilt_axis_angles,
-    shifts,
+    projection_model_optimized,
     weighting=WEIGHTING,
     object_diameter=OBJECT_DIAMETER,
 )
 final = final.to("cpu")
-aligned_ts = aligned_ts.to("cpu")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 mrcfile.write(
     OUTPUT_DIR.joinpath(IMAGE_FILE.with_suffix(".mrc").name),
     final.detach().numpy().astype(np.float32),
-    voxel_size=ALIGNMENT_PIXEL_SIZE,
-    overwrite=True,
-)
-mrcfile.write(
-    OUTPUT_DIR.joinpath(IMAGE_FILE.with_suffix(".ali").name),
-    aligned_ts.detach().numpy().astype(np.float32),
     voxel_size=ALIGNMENT_PIXEL_SIZE,
     overwrite=True,
 )
