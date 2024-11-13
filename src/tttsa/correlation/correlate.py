@@ -24,7 +24,7 @@ def correlate_2d(
     # AreTomo using some like this (filtered FFT-based approach):
     # result = result / torch.sqrt(result.abs() + .0001)
     # result = bfactor_dft(result, 300, (result.shape[-2], ) * 2, 1, True)
-    result = torch.fft.irfftn(result, dim=(-2, -1), s=a.shape)
+    result = torch.fft.irfftn(result, dim=(-2, -1), s=a.shape[-2:])
     result = torch.real(torch.fft.ifftshift(result, dim=(-2, -1)))
     if normalize is True:
         result = result / (h * w)
