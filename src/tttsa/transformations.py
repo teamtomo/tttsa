@@ -1,15 +1,23 @@
 """4x4 matrices for rotations and translations.
 
 Functions in this module generate matrices which left-multiply column vectors containing
-`xyzw` or `zyxw` homogenous coordinates.
+`xyzw` or `zyxw` homogeneous coordinates.
 """
+
+from typing import Tuple
 
 import einops
 import torch
+import torch.nn.functional as F
+from cryotypes.projectionmodel import ProjectionModel
+from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
+
+# update shift
+PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
 
 
 def Rx(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
-    """4x4 matrices for a rotation of homogenous coordinates around the X-axis.
+    """4x4 matrices for a rotation of homogeneous coordinates around the X-axis.
 
     Parameters
     ----------
@@ -17,7 +25,7 @@ def Rx(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
         `(..., )` array of angles
     zyx: bool
         Whether output should be compatible with `zyxw` (`True`) or `xyzw`
-        (`False`) homogenous coordinates.
+        (`False`) homogeneous coordinates.
 
     Returns
     -------
@@ -41,7 +49,7 @@ def Rx(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
 
 
 def Ry(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
-    """4x4 matrices for a rotation of homogenous coordinates around the Y-axis.
+    """4x4 matrices for a rotation of homogeneous coordinates around the Y-axis.
 
     Parameters
     ----------
@@ -49,7 +57,7 @@ def Ry(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
         `(..., )` array of angles
     zyx: bool
         Whether output should be compatible with `zyxw` (`True`) or `xyzw`
-        (`False`) homogenous coordinates.
+        (`False`) homogeneous coordinates.
 
     Returns
     -------
@@ -73,7 +81,7 @@ def Ry(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
 
 
 def Rz(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
-    """4x4 matrices for a rotation of homogenous coordinates around the Z-axis.
+    """4x4 matrices for a rotation of homogeneous coordinates around the Z-axis.
 
     Parameters
     ----------
@@ -81,7 +89,7 @@ def Rz(angles_degrees: torch.Tensor, zyx: bool = False) -> torch.Tensor:
         `(..., )` array of angles
     zyx: bool
         Whether output should be compatible with `zyxw` (`True`) or `xyzw`
-        (`False`) homogenous coordinates.
+        (`False`) homogeneous coordinates.
 
     Returns
     -------
@@ -152,7 +160,7 @@ def S(scale_factors: torch.Tensor) -> torch.Tensor:
 
 
 def R_2d(angles_degrees: torch.Tensor, yx: bool = False) -> torch.Tensor:
-    """3x3 matrices for a rotation of homogenous coordinates around the X-axis.
+    """3x3 matrices for a rotation of homogeneous coordinates around the X-axis.
 
     Parameters
     ----------
@@ -160,7 +168,7 @@ def R_2d(angles_degrees: torch.Tensor, yx: bool = False) -> torch.Tensor:
         `(..., )` array of angles
     yx: bool
         Whether output should be compatible with `yxw` (`True`) or `xyw`
-        (`False`) homogenous coordinates.
+        (`False`) homogeneous coordinates.
 
     Returns
     -------
@@ -225,3 +233,72 @@ def S_2d(scale_factors: torch.Tensor) -> torch.Tensor:
     matrices[:, [0, 1], [0, 1]] = scale_factors
     [matrices] = einops.unpack(matrices, packed_shapes=ps, pattern="* i j")
     return matrices
+
+
+def stretch_matrix(
+    tilt_image_dimensions: Tuple[int, int],
+    tilt_axis_angle: torch.Tensor,
+    scale_factor: torch.Tensor,
+) -> torch.Tensor:
+    """Calculate a tilt-image stretch matrix for coarse alignment."""
+    image_center = torch.tensor(tilt_image_dimensions) // 2
+    s0 = T_2d(-image_center)
+    r_forward = R_2d(tilt_axis_angle, yx=True)
+    r_backward = torch.linalg.inv(r_forward)
+    m_stretch = torch.eye(3)
+    m_stretch[1, 1] = scale_factor  # this is a shear matrix
+    s1 = T_2d(image_center)
+    return s1 @ r_forward @ m_stretch @ r_backward @ s0
+
+
+def projection_model_to_projection_matrix(
+    projection_model: ProjectionModel,
+    tilt_image_dimensions: Tuple[int, int],
+    tomogram_dimensions: Tuple[int, int, int],
+) -> torch.Tensor:
+    """Convert a cryotypes ProjectionModel to a projection matrix."""
+    tilt_image_center = (
+        torch.tensor((int(tomogram_dimensions[0]), *tilt_image_dimensions)) // 2
+    )
+    tomogram_center = torch.tensor(tomogram_dimensions) // 2
+    s0 = T(-tilt_image_center)
+    r0 = Rx(torch.tensor(projection_model[PMDL.ROTATION_X].to_numpy()), zyx=True)
+    r1 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
+    r2 = Rz(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), zyx=True)
+    s1 = T(
+        F.pad(
+            torch.tensor(projection_model[PMDL.SHIFT].to_numpy()), pad=(1, 0), value=0
+        )
+    )
+    s2 = T(tomogram_center)
+    return s2 @ s1 @ r2 @ r1 @ r0 @ s0
+
+
+def projection_model_to_tsa_matrix(
+    projection_model: ProjectionModel,
+    tilt_image_dimensions: Tuple[int, int],
+    projected_tomogram_dimensions: Tuple[int, int],
+) -> torch.Tensor:
+    """Convert cryotypes ProjectionModel to a 2D tilt-series alignment matrix."""
+    tilt_image_center = torch.tensor(tilt_image_dimensions) // 2
+    projected_tomogram_center = torch.tensor(projected_tomogram_dimensions) // 2
+    s0 = T_2d(-tilt_image_center)
+    r0 = R_2d(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), yx=True)
+    s1 = T_2d(torch.tensor(projection_model[PMDL.SHIFT].to_numpy()))
+    s2 = T_2d(projected_tomogram_center)
+    # invert for forward alignment and reconstruction
+    return torch.linalg.inv(s2 @ s1 @ r0 @ s0)
+
+
+def projection_model_to_backproject_matrix(
+    projection_model: ProjectionModel,
+    tomogram_dimensions: Tuple[int, int, int],
+) -> torch.Tensor:
+    """Convert cryotypes ProjectionModel to a backprojection matrix."""
+    tomogram_center = torch.tensor(tomogram_dimensions) // 2
+    s0 = T(-tomogram_center)
+    r0 = Rx(torch.tensor(projection_model[PMDL.ROTATION_X].to_numpy()), zyx=True)
+    r1 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
+    s1 = T(tomogram_center)
+    # invert for forward alignment and reconstruction
+    return torch.linalg.inv(s1 @ r1 @ r0 @ s0)

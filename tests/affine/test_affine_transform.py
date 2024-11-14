@@ -1,14 +1,8 @@
 import pytest
 import torch
 
-from tttsa.affine import affine_transform_2d, affine_transform_3d, stretch_image
+from tttsa.affine import affine_transform_2d, affine_transform_3d
 from tttsa.transformations import R_2d, Rz
-
-
-def test_stretch_image():
-    a = torch.zeros((5, 5))
-    b = stretch_image(a, 1.1, -85)
-    assert a.shape == b.shape
 
 
 def test_affine_transform_2d():

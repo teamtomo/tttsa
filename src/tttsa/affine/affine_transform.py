@@ -7,31 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch_grid_utils import coordinate_grid
 
-from tttsa.transformations import R_2d, T_2d
-from tttsa.utils import array_to_grid_sample, dft_center, homogenise_coordinates
-
-
-def stretch_image(
-    image: torch.Tensor,
-    stretch: torch.Tensor | float,
-    tilt_axis_angle: torch.Tensor | float,
-) -> torch.Tensor:
-    """Utility function for stretching an image on the tilt axis."""
-    image_center = dft_center(image.shape, rfft=False, fftshifted=True)
-    # construct matrix
-    s0 = T_2d(-image_center)
-    r_forward = R_2d(tilt_axis_angle, yx=True)
-    r_backward = torch.linalg.inv(r_forward)
-    m_stretch = torch.eye(3)
-    m_stretch[1, 1] = stretch  # this is a shear matrix
-    s1 = T_2d(image_center)
-    m_affine = s1 @ r_forward @ m_stretch @ r_backward @ s0
-    # transform image
-    stretched = affine_transform_2d(
-        image,
-        m_affine,
-    )
-    return stretched
+from tttsa.utils import array_to_grid_sample, homogenise_coordinates
 
 
 def affine_transform_2d(

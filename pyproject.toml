@@ -39,6 +39,7 @@ dependencies = [
     "torch-cubic-spline-grids",
     "torch-fourier-shift",
     "torch-image-lerp",
+    "cryotypes == 0.2",
     "einops",
     "numpy",
     "scipy",
