@@ -4,14 +4,17 @@ from typing import Tuple
 
 import einops
 import torch
-import torch.nn.functional as F
 from cryotypes.projectionmodel import ProjectionModel
 from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_grid_utils import coordinate_grid
 from torch_image_lerp import insert_into_image_2d
 
 from tttsa.affine import affine_transform_2d
-from tttsa.transformations import R_2d, Ry, Rz, T, T_2d
+from tttsa.transformations import (
+    R_2d,
+    T_2d,
+    projection_model_to_projection_matrix,
+)
 from tttsa.utils import dft_center, homogenise_coordinates
 
 # update shift
@@ -62,21 +65,11 @@ def tomogram_reprojection(
     """
     device = tomogram.device
     tomogram_dimensions = tomogram.shape
-    tomogram_center = dft_center(tomogram_dimensions, rfft=False, fftshifted=True)
-    transform_shape = (tomogram_dimensions[0], *tilt_image_dimensions)
-    transform_center = dft_center(transform_shape, rfft=False, fftshifted=True)
 
     # time for real space projection
-    s0 = T(-transform_center)
-    r0 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
-    r1 = Rz(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), zyx=True)
-    s1 = T(
-        F.pad(
-            torch.tensor(projection_model[PMDL.SHIFT].to_numpy()), pad=(1, 0), value=0
-        )
+    M = projection_model_to_projection_matrix(
+        projection_model, tilt_image_dimensions, tomogram_dimensions
     )
-    s2 = T(tomogram_center)
-    M = s2 @ s1 @ r1 @ r0 @ s0
     Mproj = M[:, 1:3, :]
     Mproj = einops.rearrange(Mproj, "... i j -> ... 1 1 i j").to(device)
 

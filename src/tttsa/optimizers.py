@@ -4,9 +4,9 @@ import einops
 import torch
 from torch_cubic_spline_grids import CubicBSplineGrid1d
 
-from .affine import affine_transform_2d, stretch_image
+from .affine import affine_transform_2d
 from .projection import common_lines_projection
-from .transformations import T_2d
+from .transformations import T_2d, stretch_matrix
 
 
 def stretch_loss(
@@ -19,20 +19,19 @@ def stretch_loss(
 ) -> torch.Tensor:
     """Find coarse shifts of images while stretching each pair along the tilt axis."""
     device = tilt_series.device
+    n_tilts, h, w = tilt_series.shape
+    tilt_image_dimensions = (h, w)
+    cos_ta = torch.cos(torch.deg2rad(tilt_angles))
+
     sq_diff = torch.tensor(0.0, device=device)
     for i in range(reference_tilt_id, 0, -1):
-        scale_factor = torch.cos(torch.deg2rad(tilt_angles[i : i + 1])) / torch.cos(
-            torch.deg2rad(tilt_angles[i - 1 : i])
-        )
-        stretched = stretch_image(  # stretch image i - 1
-            tilt_series[i - 1],
-            scale_factor,
+        # multiply stretch matrix by shift for full alignment
+        M = T_2d(shifts[i - 1] - shifts[i]) @ stretch_matrix(
+            tilt_image_dimensions,
             tilt_axis_angles[i - 1],
-        )
-        stretched = affine_transform_2d(  # shift to the same position as i
-            stretched,
-            T_2d(shifts[i - 1] - shifts[i]),
-        )
+            scale_factor=cos_ta[i : i + 1] / cos_ta[i - 1 : i],
+        )  # slicing cos_ta ensure gradient calculation
+        stretched = affine_transform_2d(tilt_series[i - 1], M)
         non_empty = (stretched != 0) * 1.0
         correlation_mask = non_empty * mask
         stretched = stretched * correlation_mask
@@ -42,19 +41,14 @@ def stretch_loss(
         sq_diff = sq_diff + ((ref - stretched) ** 2).sum() / stretched.numel()
 
     # find coarse alignment positive tilts
-    for i in range(reference_tilt_id, tilt_series.shape[0] - 1, 1):
-        scale_factor = torch.cos(torch.deg2rad(tilt_angles[i : i + 1])) / torch.cos(
-            torch.deg2rad(tilt_angles[i + 1 : i + 2])
-        )
-        stretched = stretch_image(  # stretch image i + 1
-            tilt_series[i + 1],
-            scale_factor,
+    for i in range(reference_tilt_id, n_tilts - 1, 1):
+        # multiply stretch matrix by shift for full alignment
+        M = T_2d(shifts[i + 1] - shifts[i]) @ stretch_matrix(
+            tilt_image_dimensions,
             tilt_axis_angles[i + 1],
-        )
-        stretched = affine_transform_2d(  # shift to positions of i
-            stretched,
-            T_2d(shifts[i + 1] - shifts[i]),
-        )
+            scale_factor=cos_ta[i : i + 1] / cos_ta[i + 1 : i + 2],
+        )  # slicing cos_ta ensure gradient calculation
+        stretched = affine_transform_2d(tilt_series[i + 1], M)
         non_empty = (stretched != 0) * 1.0
         correlation_mask = non_empty * mask
         stretched = stretched * correlation_mask

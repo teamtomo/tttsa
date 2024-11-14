@@ -10,8 +10,11 @@ from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_grid_utils import coordinate_grid
 
 from tttsa.affine import affine_transform_2d
-from tttsa.transformations import R_2d, Ry, T, T_2d
-from tttsa.utils import array_to_grid_sample, dft_center, homogenise_coordinates
+from tttsa.transformations import (
+    projection_model_to_backproject_matrix,
+    projection_model_to_tsa_matrix,
+)
+from tttsa.utils import array_to_grid_sample, homogenise_coordinates
 
 # update shift
 PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
@@ -46,19 +49,12 @@ def filtered_back_projection_3d(
     n_tilts, h, w = tilt_series.shape  # for simplicity assume square images
     tilt_image_dimensions = (h, w)
     transformed_image_dimensions = tomogram_dimensions[-2:]
-    tomogram_center = dft_center(tomogram_dimensions, rfft=False, fftshifted=True)
-    tilt_image_center = dft_center(tilt_image_dimensions, rfft=False, fftshifted=True)
-    transformed_image_center = dft_center(
-        transformed_image_dimensions, rfft=False, fftshifted=True
-    )
     _, filter_size = transformed_image_dimensions
 
     # generate the 2d alignment affine matrix
-    s0 = T_2d(-tilt_image_center)
-    r0 = R_2d(torch.tensor(projection_model[PMDL.ROTATION_Z].to_numpy()), yx=True)
-    s1 = T_2d(torch.tensor(projection_model[PMDL.SHIFT].to_numpy()))
-    s2 = T_2d(transformed_image_center)
-    M = torch.linalg.inv(s2 @ s1 @ r0 @ s0).to(device)
+    M = projection_model_to_tsa_matrix(
+        projection_model, tilt_image_dimensions, transformed_image_dimensions
+    ).to(device)
 
     aligned_ts = affine_transform_2d(
         tilt_series,
@@ -128,15 +124,17 @@ def filtered_back_projection_3d(
     if len(weighted.shape) == 2:  # rfftn gets rid of batch dimension: add it back
         weighted = einops.rearrange(weighted, "h w -> 1 h w")
 
-    # create recon from weighted-aligned ts
-    s0 = T(-tomogram_center)
-    r0 = Ry(torch.tensor(projection_model[PMDL.ROTATION_Y].to_numpy()), zyx=True)
-    s1 = T(tomogram_center)
-    # This would actually be a double linalg.inv. First for the inverse of the
-    # forward projection alignment model. The second for the affine transform.
-    # It could be more logical to use affine_transform_3d, but it requires
-    # recalculation of the grid for every iteration.
-    M = einops.rearrange(s1 @ r0 @ s0, "... i j -> ... 1 1 i j").to(device)
+    # We need to lingalg.inv the matrix as the affine transform is done inside
+    # this function. It could be more logical to use affine_transform_3d (and do
+    # inversion inside) but it requires recalculation of the grid for every iteration.
+    M = einops.rearrange(
+        torch.linalg.inv(
+            projection_model_to_backproject_matrix(
+                projection_model, tomogram_dimensions
+            )
+        ),
+        "... i j -> ... 1 1 i j",
+    ).to(device)
 
     reconstruction = torch.zeros(
         tomogram_dimensions, dtype=torch.float32, device=device

@@ -1,9 +1,11 @@
 """Coarse tilt-series alignment functions, also with stretching."""
 
+import einops
 import torch
 
-from .affine import stretch_image
+from .affine import affine_transform_2d
 from .alignment import find_image_shift
+from .transformations import stretch_matrix
 
 
 def coarse_align(
@@ -12,20 +14,25 @@ def coarse_align(
     mask: torch.Tensor,
 ) -> torch.Tensor:
     """Find coarse shifts of images without stretching along tilt axis."""
-    shifts = torch.zeros((len(tilt_series), 2), dtype=torch.float32)
+    n_tilts = len(tilt_series)
+    shifts = torch.zeros((n_tilts, 2), dtype=torch.float32)
+    ts_masked = tilt_series * mask
+    ts_masked -= einops.reduce(ts_masked, "tilt h w -> tilt 1 1", reduction="mean")
+    ts_masked /= torch.std(ts_masked, dim=(-2, -1), keepdim=True)
+
     # find coarse alignment for negative tilts
     current_shift = torch.zeros(2)
     for i in range(reference_tilt_id, 0, -1):
-        shift = find_image_shift(tilt_series[i] * mask, tilt_series[i - 1] * mask)
+        shift = find_image_shift(ts_masked[i], ts_masked[i - 1])
         current_shift += shift
         shifts[i - 1] = current_shift
 
     # find coarse alignment positive tilts
     current_shift = torch.zeros(2)
-    for i in range(reference_tilt_id, tilt_series.shape[0] - 1, 1):
+    for i in range(reference_tilt_id, n_tilts - 1, 1):
         shift = find_image_shift(
-            tilt_series[i] * mask,
-            tilt_series[i + 1] * mask,
+            ts_masked[i],
+            ts_masked[i + 1],
         )
         current_shift += shift
         shifts[i + 1] = current_shift
@@ -40,21 +47,20 @@ def stretch_align(
     tilt_axis_angles: torch.Tensor,
 ) -> torch.Tensor:
     """Find coarse shifts of images while stretching each pair along the tilt axis."""
-    shifts = torch.zeros((len(tilt_series), 2), dtype=torch.float32)
+    n_tilts, h, w = tilt_series.shape
+    tilt_image_dimensions = (h, w)
+    shifts = torch.zeros((n_tilts, 2), dtype=torch.float32)
+    cos_ta = torch.cos(torch.deg2rad(tilt_angles))
+
     # find coarse alignment for negative tilts
     current_shift = torch.zeros(2)
     for i in range(reference_tilt_id, 0, -1):
-        scale_factor = torch.cos(torch.deg2rad(tilt_angles[i : i + 1])) / torch.cos(
-            torch.deg2rad(tilt_angles[i - 1 : i])
+        M = stretch_matrix(
+            tilt_image_dimensions,
+            tilt_axis_angles[i - 1],
+            scale_factor=cos_ta[i : i + 1] / cos_ta[i - 1 : i],
         )
-        stretched = (
-            stretch_image(
-                tilt_series[i - 1],
-                scale_factor,
-                tilt_axis_angles[i - 1],
-            )
-            * mask
-        )
+        stretched = affine_transform_2d(tilt_series[i - 1], M) * mask
         stretched = (stretched - stretched.mean()) / stretched.std()
         raw = tilt_series[i] * mask
         raw = (raw - raw.mean()) / raw.std()
@@ -63,18 +69,13 @@ def stretch_align(
         shifts[i - 1] = current_shift
     # find coarse alignment positive tilts
     current_shift = torch.zeros(2)
-    for i in range(reference_tilt_id, tilt_series.shape[0] - 1, 1):
-        scale_factor = torch.cos(torch.deg2rad(tilt_angles[i : i + 1])) / torch.cos(
-            torch.deg2rad(tilt_angles[i + 1 : i + 2])
+    for i in range(reference_tilt_id, n_tilts - 1, 1):
+        M = stretch_matrix(
+            tilt_image_dimensions,
+            tilt_axis_angles[i + 1],
+            scale_factor=cos_ta[i : i + 1] / cos_ta[i + 1 : i + 2],
         )
-        stretched = (
-            stretch_image(
-                tilt_series[i + 1],
-                scale_factor,
-                tilt_axis_angles[i + 1],
-            )
-            * mask
-        )
+        stretched = affine_transform_2d(tilt_series[i + 1], M) * mask
         stretched = (stretched - stretched.mean()) / stretched.std()
         raw = tilt_series[i] * mask
         raw = (raw - raw.mean()) / raw.std()
