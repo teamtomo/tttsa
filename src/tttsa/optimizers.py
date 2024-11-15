@@ -3,10 +3,11 @@
 import einops
 import torch
 from torch_cubic_spline_grids import CubicBSplineGrid1d
+from torch_fourier_slice import project_2d_to_1d
 
 from .affine import affine_transform_2d
 from .projection import common_lines_projection
-from .transformations import T_2d, stretch_matrix
+from .transformations import R_2d, T_2d, stretch_matrix
 
 
 def stretch_loss(
@@ -94,8 +95,17 @@ def optimize_tilt_axis_angle(
     )
 
     def closure() -> torch.Tensor:
-        tilt_axis_angles = tilt_axis_grid(interpolation_points)
-        projections = common_lines_projection(coarse_aligned_masked, tilt_axis_angles)
+        # for some reason need to add 90 for fourier slice extraction
+        M = R_2d(tilt_axis_grid(interpolation_points) + 90, yx=False)[:, :2, :2]
+        projections = torch.stack(
+            [
+                project_2d_to_1d(
+                    coarse_aligned_masked[(i,)],
+                    M[(i,)].to(coarse_aligned_masked.device),
+                )
+                for i in range(len(coarse_aligned_masked))
+            ]
+        )
         projections = projections - einops.reduce(
             projections, "tilt w -> tilt 1", reduction="mean"
         )
