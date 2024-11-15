@@ -64,7 +64,7 @@ def tilt_series_alignment(
     ).numpy()
 
     start_taa_grid_points = 1  # taa = tilt-axis angle
-    pm_taa_grid_points = 3  # pm = projection matching
+    pm_taa_grid_points = 1  # pm = projection matching
 
     console.print(
         f"=== Optimizing tilt-axis angle with {start_taa_grid_points} grid point."

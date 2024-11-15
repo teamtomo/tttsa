@@ -77,6 +77,7 @@ def tomogram_reprojection(
     grid = einops.rearrange(grid, "d h w coords -> d h w coords 1")
     grid = Mproj @ grid
     grid = einops.rearrange(grid, "... d h w coords 1 -> ... d h w coords")
+
     projection, weights = insert_into_image_2d(
         tomogram.view(-1),  # flatten
         grid.view(-1, 2),
