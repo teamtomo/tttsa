@@ -6,7 +6,6 @@ from torch_cubic_spline_grids import CubicBSplineGrid1d
 from torch_fourier_slice import project_2d_to_1d
 
 from .affine import affine_transform_2d
-from .projection import common_lines_projection
 from .transformations import R_2d, T_2d, stretch_matrix
 
 
@@ -70,10 +69,10 @@ def optimize_tilt_axis_angle(
     coarse_aligned_masked = aligned_ts * coarse_alignment_mask
 
     # generate a weighting for the common line ROI by projecting the mask
-    mask_weights = common_lines_projection(
-        einops.rearrange(coarse_alignment_mask, "h w -> 1 h w"),
-        0.0,  # angle does not matter
-    )
+    mask_weights = project_2d_to_1d(
+        coarse_alignment_mask,
+        torch.eye(2).to(coarse_alignment_mask.device),  # angle does not matter
+    ).squeeze()  # remove starting empty dimension
     mask_weights /= mask_weights.max()  # normalise to 0 and 1
 
     # optimize tilt axis angle
