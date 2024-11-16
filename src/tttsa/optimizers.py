@@ -95,16 +95,18 @@ def optimize_tilt_axis_angle(
     )
 
     def closure() -> torch.Tensor:
-        # for some reason need to add 90 for fourier slice extraction
+        # The common line is the projection perpendicular to the aligned tilt-axis (
+        # aligned with the y-axis), hence add 90 degrees to project along the x-axis.
         M = R_2d(tilt_axis_grid(interpolation_points) + 90, yx=False)[:, :2, :2]
-        projections = torch.stack(
+        projections = einops.rearrange(
             [
                 project_2d_to_1d(
                     coarse_aligned_masked[(i,)],
                     M[(i,)].to(coarse_aligned_masked.device),
-                )
+                ).squeeze()  # squeeze as we only calculate one projection
                 for i in range(len(coarse_aligned_masked))
-            ]
+            ],
+            "n w -> n w",
         )
         projections = projections - einops.reduce(
             projections, "tilt w -> tilt 1", reduction="mean"
