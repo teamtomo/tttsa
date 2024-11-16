@@ -42,7 +42,7 @@ dependencies = [
     "torch-cubic-spline-grids",
     "torch-fourier-shift",
     "torch-image-lerp",
-    "torch-fourier-slice @ git+https://github.com/McHaillet/torch-fourier-slice@1d_slice_extraction",
+    "torch-fourier-slice @ git+https://github.com/teamtomo/torch-fourier-slice@main",
     "cryotypes == 0.2",
     "einops",
     "numpy",
