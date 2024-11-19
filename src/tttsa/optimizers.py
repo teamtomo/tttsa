@@ -3,10 +3,10 @@
 import einops
 import torch
 from torch_cubic_spline_grids import CubicBSplineGrid1d
+from torch_fourier_slice import project_2d_to_1d
 
 from .affine import affine_transform_2d
-from .projection import common_lines_projection
-from .transformations import T_2d, stretch_matrix
+from .transformations import R_2d, T_2d, stretch_matrix
 
 
 def stretch_loss(
@@ -69,10 +69,10 @@ def optimize_tilt_axis_angle(
     coarse_aligned_masked = aligned_ts * coarse_alignment_mask
 
     # generate a weighting for the common line ROI by projecting the mask
-    mask_weights = common_lines_projection(
-        einops.rearrange(coarse_alignment_mask, "h w -> 1 h w"),
-        0.0,  # angle does not matter
-    )
+    mask_weights = project_2d_to_1d(
+        coarse_alignment_mask,
+        torch.eye(2).to(coarse_alignment_mask.device),  # angle does not matter
+    ).squeeze()  # remove starting empty dimension
     mask_weights /= mask_weights.max()  # normalise to 0 and 1
 
     # optimize tilt axis angle
@@ -94,8 +94,19 @@ def optimize_tilt_axis_angle(
     )
 
     def closure() -> torch.Tensor:
-        tilt_axis_angles = tilt_axis_grid(interpolation_points)
-        projections = common_lines_projection(coarse_aligned_masked, tilt_axis_angles)
+        # The common line is the projection perpendicular to the aligned tilt-axis (
+        # aligned with the y-axis), hence add 90 degrees to project along the x-axis.
+        M = R_2d(tilt_axis_grid(interpolation_points) + 90, yx=False)[:, :2, :2]
+        projections = einops.rearrange(
+            [
+                project_2d_to_1d(
+                    coarse_aligned_masked[(i,)],
+                    M[(i,)].to(coarse_aligned_masked.device),
+                ).squeeze()  # squeeze as we only calculate one projection
+                for i in range(len(coarse_aligned_masked))
+            ],
+            "n w -> n w",
+        )
         projections = projections - einops.reduce(
             projections, "tilt w -> tilt 1", reduction="mean"
         )
