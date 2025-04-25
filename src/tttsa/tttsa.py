@@ -7,6 +7,8 @@ from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from rich.console import Console
 from rich.progress import track
 from torch_fourier_shift import fourier_shift_image_2d
+from torch_tiltxcorr import tiltxcorr
+from torch_refine_tilt_axis_angle import refine_tilt_axis_angle
 
 from .coarse_align import coarse_align, stretch_align
 from .optimizers import optimize_tilt_angle_offset, optimize_tilt_axis_angle
@@ -59,42 +61,43 @@ def tilt_series_alignment(
     # make a copy of the ProjectionModel to store alignments in
     projection_model = projection_model_prior.copy(deep=True)
     # do an IMOD style coarse tilt-series alignment
-    projection_model[PMDL.SHIFT] = -coarse_align(
-        tilt_series, reference_tilt, coarse_alignment_mask
-    ).numpy()
-
     start_taa_grid_points = 1  # taa = tilt-axis angle
     pm_taa_grid_points = 1  # pm = projection matching
 
     console.print(
         f"=== Optimizing tilt-axis angle with {start_taa_grid_points} grid point."
     )
-    for _ in track(range(3)):  # optimize tilt axis angle
-        projection_model[PMDL.ROTATION_Z] = optimize_tilt_axis_angle(
-            fourier_shift_image_2d(
-                tilt_series,
-                shifts=-torch.as_tensor(
-                    projection_model[PMDL.SHIFT].to_numpy(), device=device
-                ),
-            ),
-            coarse_alignment_mask,
-            torch.as_tensor(projection_model[PMDL.ROTATION_Z]),
-            grid_points=start_taa_grid_points,
-        ).numpy()
 
-        projection_model[PMDL.SHIFT] = -stretch_align(
-            tilt_series,
-            reference_tilt,
-            coarse_alignment_mask,
-            torch.as_tensor(projection_model[PMDL.ROTATION_Y]),
-            torch.as_tensor(projection_model[PMDL.ROTATION_Z]),
+    for _ in track(range(3)):  # optimize tilt axis angle
+        projection_model[PMDL.SHIFT] = tiltxcorr(
+            tilt_series=tilt_series,
+            tilt_angles=projection_model[PMDL.ROTATION_Y],
+            tilt_axis_angle=torch.mean(
+                torch.as_tensor(projection_model[PMDL.ROTATION_Z])
+            ),
+            low_pass_cutoff=.5
         ).numpy()
+        aligned_tilt_series = fourier_shift_image_2d(
+            tilt_series,
+            shifts=torch.as_tensor(
+                projection_model[PMDL.SHIFT].to_numpy(), device=device
+            ),
+        )
+        projection_model[PMDL.ROTATION_Z] = refine_tilt_axis_angle(
+            aligned_tilt_series,
+            coarse_alignment_mask,
+            torch.mean(torch.as_tensor(projection_model[PMDL.ROTATION_Z])),
+            grid_points=start_taa_grid_points,
+            return_single_angle=False,
+        ).cpu().numpy()
 
     console.print(
         f"=== New tilt axis angle: "
         f"{projection_model[PMDL.ROTATION_Z].mean():.2f}° +-"
         f" {projection_model[PMDL.ROTATION_Z].std():.2f}°"
     )
+
+    return projection_model
 
     if find_tilt_angle_offset:
         full_offset = torch.tensor(0.0)

@@ -65,9 +65,6 @@ tilt_series, _ = fourier_rescale_2d(  # should normalize beforehand
     target_spacing=ALIGNMENT_PIXEL_SIZE,
 )
 
-# Temp workaround to ensure square images
-tilt_series = tilt_series[:, tilt_series.shape[-2] % 2 :, tilt_series.shape[-1] % 2 :]
-
 # Ensure normalization after fourier rescale
 tilt_series -= einops.reduce(tilt_series, "tilt h w -> tilt 1 1", reduction="mean")
 tilt_series /= torch.std(tilt_series, dim=(-2, -1), keepdim=True)
@@ -91,14 +88,23 @@ projection_model_optimized = tilt_series_alignment(
     find_tilt_angle_offset=False,
 )
 
-final = filtered_back_projection_3d(
-    tilt_series,
-    (RECON_Z, size, size),
-    projection_model_optimized,
-    weighting=WEIGHTING,
-    object_diameter=OBJECT_DIAMETER,
-)
-final = final.to("cpu")
+from torch_fourier_shift import fourier_shift_image_2d
+final = fourier_shift_image_2d(
+            tilt_series,
+            shifts=-torch.as_tensor(
+                projection_model_optimized[PMDL.SHIFT].to_numpy(),
+                device=tilt_series.device
+            ),
+        ).to("cpu")
+
+# final = filtered_back_projection_3d(
+#     tilt_series,
+#     (RECON_Z, size, size),
+#     projection_model_optimized,
+#     weighting=WEIGHTING,
+#     object_diameter=OBJECT_DIAMETER,
+# )
+# final = final.to("cpu")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 mrcfile.write(
