@@ -40,7 +40,7 @@ dependencies = [
     "torch-fourier-shift",
     "torch-image-lerp",
     "torch-fourier-slice >= 0.0.5",
-    "torch-tiltxcorr >= 0.0.3",
+    "torch-tiltxcorr >= 0.0.5",
     "torch-refine-tilt-axis-angle",
     "cryotypes == 0.2",
     "einops",
