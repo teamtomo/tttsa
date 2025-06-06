@@ -137,7 +137,10 @@ def optimize_tilt_angle_offset(
     tilt_axis_angles: torch.Tensor,
     shifts: torch.Tensor,
 ) -> torch.Tensor:
-    """Optimize a tilt-angle offset for the lowest stretch correlation loss."""
+    """Optimize a tilt-angle offset for the lowest stretch correlation loss.
+
+    TODO use a grid based search.
+    """
     tilt_angle_offset = torch.tensor(0.0, requires_grad=True)
     lbfgs = torch.optim.LBFGS(
         [tilt_angle_offset],
