@@ -32,7 +32,7 @@ with open(Path(GOODBOY.fetch("tomo200528_107.rawtlt"))) as f:
 IMAGE_PIXEL_SIZE = 1.724
 # this angle is assumed to be a clockwise forward rotation after projecting the sample
 TILT_AXIS_ANGLE_PRIOR = -88.7
-ALIGNMENT_PIXEL_SIZE = IMAGE_PIXEL_SIZE * 8
+ALIGNMENT_PIXEL_SIZE = IMAGE_PIXEL_SIZE * 10
 ALIGN_Z = int(1600 / ALIGNMENT_PIXEL_SIZE)  # number is in A
 RECON_Z = int(2400 / ALIGNMENT_PIXEL_SIZE)
 WEIGHTING = "hamming"  # weighting scheme for filtered back projection
@@ -41,7 +41,7 @@ OBJECT_DIAMETER = 300 / ALIGNMENT_PIXEL_SIZE
 OUTPUT_DIR = Path(__file__).parent.resolve().joinpath("data")
 
 # Set the device for running
-DEVICE = "cuda:0"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Initialize the projection-model prior
 projection_model_prior = ProjectionModel(
@@ -85,26 +85,17 @@ projection_model_optimized = tilt_series_alignment(
     tilt_series.to(DEVICE),
     projection_model_prior,
     ALIGN_Z,
-    find_tilt_angle_offset=False,
+    find_tilt_angle_offset=True,
 )
 
-from torch_fourier_shift import fourier_shift_image_2d
-final = fourier_shift_image_2d(
-            tilt_series,
-            shifts=-torch.as_tensor(
-                projection_model_optimized[PMDL.SHIFT].to_numpy(),
-                device=tilt_series.device
-            ),
-        ).to("cpu")
-
-# final = filtered_back_projection_3d(
-#     tilt_series,
-#     (RECON_Z, size, size),
-#     projection_model_optimized,
-#     weighting=WEIGHTING,
-#     object_diameter=OBJECT_DIAMETER,
-# )
-# final = final.to("cpu")
+final = filtered_back_projection_3d(
+    tilt_series,
+    (RECON_Z, size, size),
+    projection_model_optimized,
+    weighting=WEIGHTING,
+    object_diameter=OBJECT_DIAMETER,
+)
+final = final.to("cpu")
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 mrcfile.write(
