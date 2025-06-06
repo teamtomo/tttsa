@@ -10,7 +10,7 @@ from torch_fourier_shift import fourier_shift_image_2d
 from torch_refine_tilt_axis_angle import refine_tilt_axis_angle
 from torch_tiltxcorr import tiltxcorr, tiltxcorr_no_stretch
 
-from .optimizers import optimize_tilt_angle_offset, optimize_tilt_axis_angle
+from .optimizers import optimize_tilt_angle_offset
 from .projection_matching import projection_matching
 from .utils import circle
 
@@ -138,16 +138,22 @@ def tilt_series_alignment(
         f" {pm_taa_grid_points} grid points for the tilt-axis angle."
     )
     for i in range(max_iter):
-        projection_model[PMDL.ROTATION_Z] = optimize_tilt_axis_angle(
-            fourier_shift_image_2d(
-                tilt_series,
-                shifts=-torch.as_tensor(
-                    projection_model[PMDL.SHIFT].to_numpy(), device=device
-                ),
+        aligned_tilt_series = fourier_shift_image_2d(
+            tilt_series,
+            shifts=-torch.as_tensor(
+                projection_model[PMDL.SHIFT].to_numpy(), device=device
             ),
-            coarse_alignment_mask,
-            torch.as_tensor(projection_model[PMDL.ROTATION_Z]),
-            grid_points=pm_taa_grid_points,
+        )
+        projection_model[PMDL.ROTATION_Z] = (
+            refine_tilt_axis_angle(
+                aligned_tilt_series,
+                coarse_alignment_mask,
+                torch.mean(torch.as_tensor(projection_model[PMDL.ROTATION_Z])),
+                grid_points=pm_taa_grid_points,
+                return_single_angle=False,
+            )
+            .cpu()
+            .numpy()
         )
 
         projection_model, _ = projection_matching(
