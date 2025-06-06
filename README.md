@@ -37,7 +37,9 @@ n_tilts = len(tilt_angles)
 # this angle is assumed to be a clockwise forward rotation after projecting the sample
 tilt_axis_angle_prior = -88.7
 alignment_pixel_size = 10  # in A
-align_z = int(1600 / alignment_pixel_size)  # number is in A
+# calculate sample thickness in pixels, 1600 A (160nm) thick ice layer
+# like in AreTomo this parameter is very critical for alignment quality
+align_z = int(1600 / alignment_pixel_size)
 recon_z = int(2400 / alignment_pixel_size)
 weighting = "hamming"  # weighting scheme for filtered back projection
 device = "cuda" if torch.cuda.is_available() else "cpu"
