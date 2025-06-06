@@ -78,7 +78,9 @@ def projection_matching(
             raw,
             projection,
         )
-        projection_model_out.loc[i, PMDL.SHIFT] += shift.numpy()
+        projection_model_out.loc[i, PMDL.SHIFT] = (
+            projection_model_out.loc[i, PMDL.SHIFT] + shift.numpy()
+        ).astype("float32")
         aligned_set.append(i)
 
         # for debugging:
