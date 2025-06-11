@@ -12,7 +12,7 @@ Automated tilt-series alignment for cryo-ET using teamtomo-torch!
   <img src="./examples/tttsa_example_result.png" width="600" alt="result of running the example for tttsa">
 </p>
 
-The implementation follows the algorithm in the AreTomo paper: https://www.sciencedirect.com/science/article/pii/S2590152422000095
+The implementation follows the algorithm in the [AreTomo paper](https://www.sciencedirect.com/science/article/pii/S2590152422000095)!
 
 ## Installation
 
