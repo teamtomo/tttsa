@@ -1,12 +1,9 @@
 """Optimization of tilt-series parameters."""
 
-import einops
 import torch
-from torch_cubic_spline_grids import CubicBSplineGrid1d
-from torch_fourier_slice import project_2d_to_1d
 
 from .affine import affine_transform_2d
-from .transformations import R_2d, T_2d, stretch_matrix
+from .transformations import T_2d, stretch_matrix
 
 
 def stretch_loss(
@@ -57,77 +54,6 @@ def stretch_loss(
         ref = (ref - ref.mean()) / ref.std()
         sq_diff = sq_diff + ((ref - stretched) ** 2).sum() / stretched.numel()
     return sq_diff.cpu()
-
-
-def optimize_tilt_axis_angle(
-    aligned_ts: torch.Tensor,
-    coarse_alignment_mask: torch.Tensor,
-    initial_tilt_axis_angle: torch.Tensor | float,
-    grid_points: int = 1,
-) -> torch.Tensor:
-    """Optimize tilt axis angles on a spline grid using the LBFGS optimizer."""
-    coarse_aligned_masked = aligned_ts * coarse_alignment_mask
-
-    # generate a weighting for the common line ROI by projecting the mask
-    mask_weights = project_2d_to_1d(
-        coarse_alignment_mask,
-        torch.eye(2).to(coarse_alignment_mask.device),  # angle does not matter
-    ).squeeze()  # remove starting empty dimension
-    mask_weights /= mask_weights.max()  # normalise to 0 and 1
-
-    # optimize tilt axis angle
-    tilt_axis_grid = CubicBSplineGrid1d(resolution=grid_points, n_channels=1)
-    tilt_axis_grid.data = torch.tensor(
-        [
-            torch.mean(initial_tilt_axis_angle),
-        ]
-        * grid_points,
-        dtype=torch.float32,
-    )
-    interpolation_points = torch.linspace(0, 1, len(aligned_ts))
-
-    lbfgs = torch.optim.LBFGS(
-        tilt_axis_grid.parameters(),
-        history_size=10,
-        max_iter=4,
-        line_search_fn="strong_wolfe",
-    )
-
-    def closure() -> torch.Tensor:
-        # The common line is the projection perpendicular to the aligned tilt-axis (
-        # aligned with the y-axis), hence add 90 degrees to project along the x-axis.
-        M = R_2d(tilt_axis_grid(interpolation_points) + 90, yx=False)[:, :2, :2]
-        projections = einops.rearrange(
-            [
-                project_2d_to_1d(
-                    coarse_aligned_masked[(i,)],
-                    M[(i,)].to(coarse_aligned_masked.device),
-                ).squeeze()  # squeeze as we only calculate one projection
-                for i in range(len(coarse_aligned_masked))
-            ],
-            "n w -> n w",
-        )
-        projections = projections - einops.reduce(
-            projections, "tilt w -> tilt 1", reduction="mean"
-        )
-        projections = projections / torch.std(projections, dim=(-1), keepdim=True)
-        # weight the lines by the projected mask
-        projections = projections * mask_weights
-
-        lbfgs.zero_grad()
-        squared_differences = (
-            projections - einops.rearrange(projections, "b d -> b 1 d")
-        ) ** 2
-        loss = einops.reduce(squared_differences, "b1 b2 d -> 1", reduction="sum")
-        loss.backward()
-        return loss.cpu()
-
-    for _ in range(3):
-        lbfgs.step(closure)
-
-    tilt_axis_angles = tilt_axis_grid(interpolation_points)
-
-    return tilt_axis_angles.detach()
 
 
 def optimize_tilt_angle_offset(
