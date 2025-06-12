@@ -89,9 +89,10 @@ def tilt_series_alignment(
         )
         projection_model[PMDL.ROTATION_Z] = (
             refine_tilt_axis_angle(
-                aligned_tilt_series,
-                coarse_alignment_mask,
-                torch.mean(torch.as_tensor(projection_model[PMDL.ROTATION_Z])),
+                tilt_series=aligned_tilt_series,
+                tilt_axis_angle=torch.mean(
+                    torch.as_tensor(projection_model[PMDL.ROTATION_Z])
+                ),
                 grid_points=start_taa_grid_points,
                 return_single_angle=False,
             )
@@ -146,9 +147,10 @@ def tilt_series_alignment(
         )
         projection_model[PMDL.ROTATION_Z] = (
             refine_tilt_axis_angle(
-                aligned_tilt_series,
-                coarse_alignment_mask,
-                torch.mean(torch.as_tensor(projection_model[PMDL.ROTATION_Z])),
+                tilt_series=aligned_tilt_series,
+                tilt_axis_angle=torch.mean(
+                    torch.as_tensor(projection_model[PMDL.ROTATION_Z])
+                ),
                 grid_points=pm_taa_grid_points,
                 return_single_angle=False,
             )
