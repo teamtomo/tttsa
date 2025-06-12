@@ -41,7 +41,7 @@ dependencies = [
     "torch-image-lerp",
     "torch-fourier-slice >= 0.0.5",
     "torch-tiltxcorr >= 0.0.5",
-    "torch-refine-tilt-axis-angle",
+    "torch-refine-tilt-axis-angle >= 0.0.3",
     "cryotypes == 0.2",
     "einops",
     "numpy",
