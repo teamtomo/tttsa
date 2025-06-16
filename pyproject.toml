@@ -64,6 +64,7 @@ dev = [
     "mrcfile",
     "torch-fourier-rescale",
     "torch-subpixel-crop",
+    "torch-tomogram",
     "pooch",
 ]
 
