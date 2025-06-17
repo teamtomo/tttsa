@@ -11,9 +11,9 @@ from cryotypes.projectionmodel import ProjectionModel
 from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from torch_fourier_rescale import fourier_rescale_2d
 from torch_subpixel_crop import subpixel_crop_2d
+from torch_tomogram import Tomogram
 
 from tttsa import tilt_series_alignment
-from tttsa.back_projection import filtered_back_projection_3d
 from tttsa.utils import dft_center
 
 # https://github.com/fatiando/pooch
@@ -88,14 +88,13 @@ projection_model_optimized = tilt_series_alignment(
     find_tilt_angle_offset=True,
 )
 
-final = filtered_back_projection_3d(
-    tilt_series,
-    (RECON_Z, size, size),
-    projection_model_optimized,
-    weighting=WEIGHTING,
-    object_diameter=OBJECT_DIAMETER,
+tomogram = Tomogram(
+    tilt_angles=projection_model_optimized[PMDL.ROTATION_Y],
+    tilt_axis_angle=projection_model_optimized[PMDL.ROTATION_Z],
+    sample_translations=projection_model_optimized[PMDL.SHIFT].to_numpy(),
+    images=tilt_series.to("cpu"),
 )
-final = final.to("cpu")
+final = tomogram.reconstruct_tomogram((RECON_Z, size, size), 128)
 
 OUTPUT_DIR.mkdir(exist_ok=True)
 mrcfile.write(
