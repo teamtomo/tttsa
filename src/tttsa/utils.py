@@ -1,5 +1,6 @@
 """Utility functions for tttsa."""
 
+from functools import lru_cache
 from typing import Sequence, Tuple
 
 import einops
@@ -7,6 +8,15 @@ import scipy.ndimage as ndi
 import torch
 import torch.nn.functional as F
 from torch_grid_utils import coordinate_grid
+
+
+@lru_cache(maxsize=1)
+def prep_grid_cached(tomogram_dimensions: tuple[int], device: str) -> torch.Tensor:
+    """Create a coordinate grid in the tomogram space for interpolation."""
+    grid = coordinate_grid(tomogram_dimensions, device=device)
+    grid = homogenise_coordinates(grid)
+    grid = einops.rearrange(grid, "d h w coords -> d h w coords 1")
+    return grid
 
 
 def rfft_shape(input_shape: Sequence[int]) -> Sequence[int]:

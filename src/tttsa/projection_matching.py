@@ -7,6 +7,7 @@ import torch
 from cryotypes.projectionmodel import ProjectionModel
 from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
 from rich.progress import track
+from torch_fourier_filter.bandpass import bandpass_filter
 
 from .alignment import find_image_shift
 from .back_projection import filtered_back_projection_3d
@@ -14,6 +15,14 @@ from .projection import tomogram_reprojection
 
 # update shift
 PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
+
+
+def _normalise_and_mask(image: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    n = torch.sum(mask)
+    mean = torch.sum(image * mask) / n
+    std = (torch.sum(image**2 * mask) / n - mean**2) ** 0.5
+    normalised_image = ((image - mean) / std) * mask
+    return normalised_image
 
 
 def projection_matching(
@@ -33,6 +42,16 @@ def projection_matching(
     projection_model_out = projection_model_in.copy(deep=True)
     tilt_angles = torch.tensor(  # to tensor as we need it to calculate weights
         projection_model_out[PMDL.ROTATION_Y].to_numpy(), dtype=tilt_series.dtype
+    )
+
+    bandpass = bandpass_filter(
+        low=0.025,
+        high=0.25,
+        falloff=0.025,
+        rfft=True,
+        fftshift=False,
+        image_shape=(size, size),
+        device=tilt_series.device,
     )
 
     # generate indices by alternating postive/negative tilts
@@ -61,19 +80,21 @@ def projection_matching(
             weighting=reconstruction_weighting,
             object_diameter=exact_weighting_object_diameter,
         )
-        projection, projection_weights = tomogram_reprojection(
+        projection, _ = tomogram_reprojection(
             intermediate_recon,
             (size, size),
             projection_model_out.iloc[[i],],
         )
 
-        # ensure correlation in relevant area
-        projection_weights = projection_weights / projection_weights.max()
-        projection_weights *= alignment_mask
-        projection *= projection_weights
-        projection = (projection - projection.mean()) / projection.std()
-        raw = tilt_series[i] * projection_weights
-        raw = (raw - raw.mean()) / raw.std()
+        # apply bandpass
+        raw = torch.fft.irfftn(torch.fft.rfftn(tilt_series[i]) * bandpass)
+        projection = torch.fft.irfftn(torch.fft.rfftn(projection) * bandpass)
+
+        # normalise and mask circular area
+        projection = _normalise_and_mask(projection, alignment_mask)
+        raw = _normalise_and_mask(raw, alignment_mask)
+
+        # calculate the shift and update alignment
         shift = find_image_shift(
             raw,
             projection,

@@ -7,14 +7,13 @@ import torch
 import torch.nn.functional as F
 from cryotypes.projectionmodel import ProjectionModel
 from cryotypes.projectionmodel import ProjectionModelDataLabels as PMDL
-from torch_grid_utils import coordinate_grid
 
 from tttsa.affine import affine_transform_2d
 from tttsa.transformations import (
     projection_model_to_backproject_matrix,
     projection_model_to_tsa_matrix,
 )
-from tttsa.utils import array_to_grid_sample, homogenise_coordinates
+from tttsa.utils import array_to_grid_sample, prep_grid_cached
 
 # update shift
 PMDL.SHIFT = [PMDL.SHIFT_Y, PMDL.SHIFT_X]
@@ -139,8 +138,7 @@ def filtered_back_projection_3d(
     reconstruction = torch.zeros(
         tomogram_dimensions, dtype=torch.float32, device=device
     )
-    grid = homogenise_coordinates(coordinate_grid(tomogram_dimensions, device=device))
-    grid = einops.rearrange(grid, "d h w coords -> d h w coords 1")
+    grid = prep_grid_cached(tomogram_dimensions, device)
 
     for i in range(n_tilts):  # could do all grids simultaneously
         grid_t = M[i] @ grid
